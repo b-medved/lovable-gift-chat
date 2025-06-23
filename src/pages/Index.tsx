@@ -75,7 +75,7 @@ const Index = () => {
             <Button 
               size="lg" 
               className="dream-gradient hover:opacity-90 text-white px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 group magic-glow"
-              onClick={() => navigate('/chat')}
+              onClick={() => navigate('/giver-context')}
             >
               Start Gift Discovery
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
@@ -182,7 +182,7 @@ const Index = () => {
           <Button 
             size="lg" 
             className="bg-white text-slate-900 hover:bg-slate-100 px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-            onClick={() => navigate('/chat')}
+            onClick={() => navigate('/giver-context')}
           >
             Create Gift Discovery Link
           </Button>

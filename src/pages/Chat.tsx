@@ -12,7 +12,7 @@ interface Message {
   text: string;
   isAi: boolean;
   timestamp: Date;
-  options?: string[];
+  isStreaming?: boolean;
 }
 
 interface GiverContext {
@@ -32,33 +32,7 @@ const Chat = () => {
   const [userAnswers, setUserAnswers] = useState<string[]>([]);
   const [giverContext, setGiverContext] = useState<GiverContext | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const questions = [
-    {
-      text: "✨ Hi! Someone who cares about you wants to get you the perfect {occasion} gift! I'm here to help them understand what you'd truly love. What's your favorite way to spend a relaxing weekend?",
-      options: ["Reading or watching movies at home", "Exploring outdoors and being active", "Spending time with friends and family", "Working on hobbies or creative projects"]
-    },
-    {
-      text: "That sounds wonderful! What kind of activities make you completely lose track of time?",
-      options: ["Creative activities (art, music, writing)", "Physical activities (sports, hiking, yoga)", "Learning new things (courses, books, documentaries)", "Social activities (parties, game nights, events)"]
-    },
-    {
-      text: "Love it! When it comes to your personal style, which appeals to you most?",
-      options: ["Modern and minimalist", "Classic and timeless", "Bohemian and artistic", "Trendy and fashionable"]
-    },
-    {
-      text: "Perfect! Do you prefer gifts that are:",
-      options: ["Practical - things I'll use every day", "Special treats - luxury items I wouldn't buy myself", "Experiences - activities or events to enjoy", "Personal - something meaningful and sentimental"]
-    },
-    {
-      text: "Great insight! What's most important to you in a gift?",
-      options: ["It shows they really know me", "It's something I'll treasure forever", "It's useful and improves my daily life", "It creates fun memories or experiences"]
-    },
-    {
-      text: "Almost done! Is there anything you're really hoping to avoid or definitely don't want?",
-      options: ["Nothing specific - I'm open to surprises", "Please no clothing or accessories", "Nothing too personal or intimate", "No tech gadgets or electronics"]
-    }
-  ];
+  const totalQuestions = 8;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -82,74 +56,110 @@ const Chat = () => {
 
     // Add initial message
     if (messages.length === 0) {
-      const initialQuestion = questions[0];
-      const initialMessage: Message = {
-        id: '1',
-        text: giverContext 
-          ? initialQuestion.text.replace('{occasion}', giverContext.occasion)
-          : initialQuestion.text.replace('{occasion}', 'special'),
-        isAi: true,
-        timestamp: new Date(),
-        options: initialQuestion.options
-      };
-      setMessages([initialMessage]);
+      addInitialMessage();
     }
   }, [giverContext]);
 
-  const addMessage = (text: string, isAi: boolean, options?: string[]) => {
+  const addInitialMessage = () => {
+    const welcomeText = giverContext 
+      ? `✨ Hi! Someone who cares about you wants to get you the perfect ${giverContext.occasion} gift! I'm here to help them understand what you'd truly love. Let's start with getting to know you better - what's your favorite way to spend a relaxing weekend?`
+      : "✨ Hi! Someone who cares about you wants to get you the perfect gift! I'm here to help them understand what you'd truly love. What's your favorite way to spend a relaxing weekend?";
+    
+    addMessage(welcomeText, true);
+  };
+
+  const addMessage = (text: string, isAi: boolean, isStreaming: boolean = false) => {
     const newMessage: Message = {
       id: Date.now().toString(),
       text,
       isAi,
       timestamp: new Date(),
-      options
+      isStreaming
     };
     setMessages(prev => [...prev, newMessage]);
+    return newMessage.id;
   };
 
-  const handleOptionClick = (option: string) => {
-    handleAnswer(option);
+  const updateStreamingMessage = (messageId: string, newText: string) => {
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId 
+        ? { ...msg, text: newText, isStreaming: false }
+        : msg
+    ));
   };
 
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
-    handleAnswer(inputValue);
-  };
-
-  const handleAnswer = (answer: string) => {
-    // Add user message
-    addMessage(answer, false);
-    setUserAnswers(prev => [...prev, answer]);
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || isTyping) return;
+    
+    const userMessage = inputValue.trim();
+    addMessage(userMessage, false);
+    setUserAnswers(prev => [...prev, userMessage]);
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate AI typing delay
-    setTimeout(() => {
-      setIsTyping(false);
-      const nextQuestionIndex = currentQuestion + 1;
+    try {
+      const messageId = addMessage('', true, true);
+      let streamedText = '';
+
+      const response = await fetch('/api/discovery/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          questionNumber: currentQuestion + 1,
+          giverContext,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = new TextDecoder().decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.content) {
+                streamedText += data.content;
+                updateStreamingMessage(messageId, streamedText);
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+
+      setCurrentQuestion(prev => prev + 1);
       
-      if (nextQuestionIndex < questions.length) {
-        const nextQuestion = questions[nextQuestionIndex];
-        addMessage(nextQuestion.text, true, nextQuestion.options);
-        setCurrentQuestion(nextQuestionIndex);
-      } else {
-        // Chat completed, show curated options
-        addMessage("Perfect! I have everything needed to create amazing gift recommendations. Let me show you some curated options based on your preferences... ✨", true);
+      // Check if we've completed all questions
+      if (currentQuestion + 1 >= totalQuestions) {
         setTimeout(() => {
-          // Store answers for results page
-          localStorage.setItem('chatAnswers', JSON.stringify(userAnswers.concat([answer])));
+          localStorage.setItem('chatAnswers', JSON.stringify([...userAnswers, userMessage]));
           if (giverContext) {
             localStorage.setItem('giverContext', JSON.stringify(giverContext));
           }
           navigate('/results');
         }, 2000);
       }
-    }, 1500);
-  };
 
-  const handleSkip = () => {
-    if (currentQuestion >= 3) {
-      navigate('/results');
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      updateStreamingMessage(messageId || '', 'Sorry, I encountered an error. Please try again.');
+    } finally {
+      setIsTyping(false);
     }
   };
 
@@ -160,7 +170,17 @@ const Chat = () => {
     }
   };
 
-  const progress = ((currentQuestion + 1) / questions.length) * 100;
+  const handleSkip = () => {
+    if (currentQuestion >= 5) {
+      localStorage.setItem('chatAnswers', JSON.stringify(userAnswers));
+      if (giverContext) {
+        localStorage.setItem('giverContext', JSON.stringify(giverContext));
+      }
+      navigate('/results');
+    }
+  };
+
+  const progress = ((currentQuestion) / totalQuestions) * 100;
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
@@ -183,7 +203,7 @@ const Chat = () => {
                 Gift Discovery Chat
               </span>
               <span className="text-xs text-slate-400">
-                Question {currentQuestion + 1} of {questions.length}
+                Question {currentQuestion + 1} of {totalQuestions}
                 {giverContext && (
                   <span className="ml-2 text-pink-400">
                     <Heart className="w-3 h-3 inline mr-1" />
@@ -193,7 +213,7 @@ const Chat = () => {
               </span>
             </div>
           </div>
-          {currentQuestion >= 3 && (
+          {currentQuestion >= 5 && (
             <Button variant="ghost" size="sm" onClick={handleSkip} className="text-slate-300">
               <SkipForward className="w-4 h-4 mr-2" />
               Skip remaining
@@ -216,29 +236,16 @@ const Chat = () => {
                     ? 'bg-slate-800 border-slate-700 text-slate-50' 
                     : 'dream-gradient text-white border-0 magic-glow'
                 }`}>
-                  <p className="leading-relaxed mb-2">{message.text}</p>
+                  <p className="leading-relaxed mb-2">
+                    {message.text}
+                    {message.isStreaming && <span className="animate-pulse">|</span>}
+                  </p>
                   <span className={`text-xs block ${
                     message.isAi ? 'text-slate-400' : 'text-slate-200'
                   }`}>
                     {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </Card>
-                
-                {/* Option buttons for AI messages */}
-                {message.isAi && message.options && !isTyping && (
-                  <div className="mt-4 space-y-2">
-                    {message.options.map((option, index) => (
-                      <Button
-                        key={index}
-                        onClick={() => handleOptionClick(option)}
-                        variant="outline"
-                        className="w-full text-left justify-start bg-slate-700/50 border-slate-600 text-slate-200 hover:bg-slate-600 hover:text-slate-50"
-                      >
-                        {option}
-                      </Button>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           ))}
@@ -270,7 +277,7 @@ const Chat = () => {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Or type your own answer..."
+                placeholder="Share your thoughts..."
                 className="text-lg py-3 px-4 border-2 border-slate-600 focus:border-violet-500 bg-slate-700 text-slate-50 placeholder:text-slate-400"
                 disabled={isTyping}
               />
@@ -284,7 +291,7 @@ const Chat = () => {
             </Button>
           </div>
           <p className="text-xs text-slate-400 mt-2 text-center">
-            Choose from options above or type your own • Question {currentQuestion + 1} of {questions.length}
+            Question {currentQuestion + 1} of {totalQuestions} • AI-powered gift discovery
           </p>
         </div>
       </div>

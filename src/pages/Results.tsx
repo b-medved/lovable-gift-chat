@@ -9,93 +9,77 @@ import { toast } from "@/hooks/use-toast";
 
 interface GiftItem {
   id: string;
-  name: string;
+  title: string;
+  description: string;
   priceRange: string;
   category: string;
-  description: string;
   reasoning: string;
-  link?: string;
+  searchQuery?: string;
+}
+
+interface GiverContext {
+  occasion: string;
+  budgetRange: string;
+  relationship: string;
+  recipientName: string;
 }
 
 const Results = () => {
   const navigate = useNavigate();
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [gifts, setGifts] = useState<GiftItem[]>([]);
   const [shareUrl] = useState('https://giftai.app/list/abc123');
-
-  const mockGifts: GiftItem[] = [
-    {
-      id: '1',
-      name: 'Premium Coffee Subscription',
-      priceRange: '$25-50',
-      category: 'Food & Drink',
-      description: 'Monthly delivery of freshly roasted coffee beans from around the world',
-      reasoning: 'Perfect for cozy weekend vibes and someone who appreciates quality beverages. The subscription format means they\'ll think of the giver every month - creating ongoing connection!'
-    },
-    {
-      id: '2',
-      name: 'Noise-Canceling Headphones',
-      priceRange: '$80-150',
-      category: 'Technology',
-      description: 'High-quality wireless headphones with active noise cancellation',
-      reasoning: 'Ideal for indoor relaxation activities like music, podcasts, or focusing on hobbies. Shows you understand their need for peaceful personal time.'
-    },
-    {
-      id: '3',
-      name: 'Cozy Reading Sanctuary Kit',
-      priceRange: '$40-80',
-      category: 'Home & Living',
-      description: 'Luxurious throw blanket, reading pillow, and warm ambient lighting',
-      reasoning: 'Creates the perfect environment for weekend relaxation. This gift says "I want you to have beautiful moments of peace and comfort."'
-    },
-    {
-      id: '4',
-      name: 'Artisan Self-Care Collection',
-      priceRange: '$30-60',
-      category: 'Beauty & Wellness',
-      description: 'Handcrafted face masks, serums, and bath products with natural ingredients',
-      reasoning: 'An indulgent treat that encourages self-care weekends. Shows thoughtfulness about their wellbeing and creates spa-like experiences at home.'
-    },
-    {
-      id: '5',
-      name: 'Smart Herb Garden',
-      priceRange: '$35-70',
-      category: 'Home & Garden',
-      description: 'Self-watering indoor garden with LED grow lights for fresh herbs',
-      reasoning: 'Combines indoor hobby appeal with practical benefits. Perfect for someone who enjoys nurturing plants and cooking with fresh ingredients.'
-    },
-    {
-      id: '6',
-      name: 'Premium Puzzle Collection',
-      priceRange: '$20-45',
-      category: 'Games & Puzzles',
-      description: 'Beautiful artistic jigsaw puzzles and brain teasers for quiet entertainment',
-      reasoning: 'Ideal for peaceful weekend activities and mindful relaxation. Shows you appreciate their love for engaging, contemplative pastimes.'
-    },
-    {
-      id: '7',
-      name: 'Aromatherapy Experience Set',
-      priceRange: '$25-55',
-      category: 'Wellness',
-      description: 'Elegant diffuser with curated essential oil collection',
-      reasoning: 'Creates a calming atmosphere for indoor relaxation. The wellness aspect shows care for their mental and emotional wellbeing.'
-    },
-    {
-      id: '8',
-      name: 'Gourmet Tea Journey',
-      priceRange: '$30-65',
-      category: 'Food & Drink',
-      description: 'Curated selection of premium loose-leaf teas with tasting notes',
-      reasoning: 'Perfect for creating special weekend moments and exploring new flavors. Encourages mindful, meditative tea rituals they can enjoy.'
-    }
-  ];
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
-    return () => clearTimeout(timer);
+    generateGifts();
   }, []);
+
+  const generateGifts = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Get stored data
+      const chatAnswers = localStorage.getItem('chatAnswers');
+      const giverContextStr = localStorage.getItem('giverContext');
+      
+      if (!chatAnswers) {
+        setError('No chat data found. Please complete the discovery chat first.');
+        return;
+      }
+
+      const answers = JSON.parse(chatAnswers);
+      const giverContext: GiverContext | undefined = giverContextStr ? JSON.parse(giverContextStr) : undefined;
+
+      const response = await fetch('/api/generate-gifts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          preferences: {
+            answers,
+            giverContext,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate gift recommendations');
+      }
+
+      const data = await response.json();
+      setGifts(data.gifts);
+
+    } catch (error) {
+      console.error('Error generating gifts:', error);
+      setError('Failed to generate gift recommendations. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleShare = async () => {
     try {
@@ -116,6 +100,23 @@ const Results = () => {
   const toggleExpanded = (id: string) => {
     setExpandedCard(expandedCard === id ? null : id);
   };
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Heart className="w-8 h-8 text-red-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-50 mb-2">Oops!</h2>
+          <p className="text-slate-300 mb-6">{error}</p>
+          <Button onClick={() => navigate('/chat')} className="dream-gradient hover:opacity-90 text-white magic-glow">
+            Start Discovery Chat
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -194,62 +195,71 @@ const Results = () => {
       {/* Gift Cards Grid */}
       <section className="w-full py-12 px-6">
         <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {mockGifts.map((gift) => (
-              <Card 
-                key={gift.id} 
-                className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border-slate-700 bg-slate-800/50 hover:bg-slate-800/70 overflow-hidden magic-glow"
-                onClick={() => toggleExpanded(gift.id)}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <Badge variant="secondary" className="bg-violet-500/20 text-violet-300 border-violet-500/30">
-                      {gift.category}
-                    </Badge>
-                    <Badge variant="outline" className="text-green-400 border-green-500/50 bg-green-500/10">
-                      {gift.priceRange}
-                    </Badge>
-                  </div>
-                  
-                  <h3 className="text-lg font-bold text-slate-50 mb-3 group-hover:text-violet-300 transition-colors">
-                    {gift.name}
-                  </h3>
-                  
-                  <p className="text-slate-300 text-sm leading-relaxed mb-4">
-                    {gift.description}
-                  </p>
-                  
-                  <div className="flex items-center justify-between">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="text-violet-400 hover:text-violet-300 p-0 h-auto font-semibold"
-                    >
-                      Why this gift?
-                      {expandedCard === gift.id ? (
-                        <ChevronUp className="w-4 h-4 ml-1" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 ml-1" />
-                      )}
-                    </Button>
-                    {gift.link && (
-                      <Button variant="ghost" size="sm" className="p-0 h-auto text-slate-400 hover:text-slate-300">
-                        <ExternalLink className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                  
-                  {expandedCard === gift.id && (
-                    <div className="mt-4 p-4 bg-violet-500/10 border border-violet-500/20 rounded-lg animate-accordion-down">
-                      <p className="text-sm text-slate-300 leading-relaxed">
-                        {gift.reasoning}
-                      </p>
+          {gifts.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-slate-300 text-lg mb-6">No gift recommendations generated yet.</p>
+              <Button onClick={generateGifts} className="dream-gradient hover:opacity-90 text-white magic-glow">
+                Generate Recommendations
+              </Button>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {gifts.map((gift) => (
+                <Card 
+                  key={gift.id} 
+                  className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border-slate-700 bg-slate-800/50 hover:bg-slate-800/70 overflow-hidden magic-glow"
+                  onClick={() => toggleExpanded(gift.id)}
+                >
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <Badge variant="secondary" className="bg-violet-500/20 text-violet-300 border-violet-500/30">
+                        {gift.category}
+                      </Badge>
+                      <Badge variant="outline" className="text-green-400 border-green-500/50 bg-green-500/10">
+                        {gift.priceRange}
+                      </Badge>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    
+                    <h3 className="text-lg font-bold text-slate-50 mb-3 group-hover:text-violet-300 transition-colors">
+                      {gift.title}
+                    </h3>
+                    
+                    <p className="text-slate-300 text-sm leading-relaxed mb-4">
+                      {gift.description}
+                    </p>
+                    
+                    <div className="flex items-center justify-between">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-violet-400 hover:text-violet-300 p-0 h-auto font-semibold"
+                      >
+                        Why this gift?
+                        {expandedCard === gift.id ? (
+                          <ChevronUp className="w-4 h-4 ml-1" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 ml-1" />
+                        )}
+                      </Button>
+                      {gift.searchQuery && (
+                        <Button variant="ghost" size="sm" className="p-0 h-auto text-slate-400 hover:text-slate-300">
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {expandedCard === gift.id && (
+                      <div className="mt-4 p-4 bg-violet-500/10 border border-violet-500/20 rounded-lg animate-accordion-down">
+                        <p className="text-sm text-slate-300 leading-relaxed">
+                          {gift.reasoning}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

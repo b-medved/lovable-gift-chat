@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,9 +60,9 @@ const Index = () => {
           </div>
           
           <h1 className="text-4xl md:text-6xl font-bold text-slate-50 mb-6 leading-tight">
-            Give Gifts That 
-            <span className="dream-gradient bg-clip-text text-transparent">
-              {" "}Truly Matter
+            Give Gifts That{" "}
+            <span className="bg-gradient-to-r from-violet-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Truly Matter
             </span>
           </h1>
           

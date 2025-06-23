@@ -1,4 +1,5 @@
 
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,7 +20,7 @@ const App = () => {
     if (import.meta.env.DEV) {
       const originalFetch = window.fetch;
       window.fetch = async (input, init) => {
-        const url = typeof input === 'string' ? input : input.url;
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
         
         if (url.startsWith('/api/discovery/chat')) {
           return originalFetch('http://localhost:54321/functions/v1/discovery-chat', {

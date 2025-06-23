@@ -98,7 +98,7 @@ const Chat = () => {
     setIsTyping(true);
 
     try {
-      const messageId = addMessage('', true, true);
+      const streamingMessageId = addMessage('', true, true);
       let streamedText = '';
 
       const response = await fetch('/api/discovery/chat', {
@@ -133,7 +133,7 @@ const Chat = () => {
               const data = JSON.parse(line.slice(6));
               if (data.content) {
                 streamedText += data.content;
-                updateStreamingMessage(messageId, streamedText);
+                updateStreamingMessage(streamingMessageId, streamedText);
               }
             } catch (e) {
               // Skip invalid JSON
@@ -157,7 +157,7 @@ const Chat = () => {
 
     } catch (error) {
       console.error('Error getting AI response:', error);
-      updateStreamingMessage(messageId || '', 'Sorry, I encountered an error. Please try again.');
+      updateStreamingMessage(streamingMessageId || '', 'Sorry, I encountered an error. Please try again.');
     } finally {
       setIsTyping(false);
     }
